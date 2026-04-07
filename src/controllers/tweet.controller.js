@@ -33,7 +33,7 @@ const createTweet = asyncHandler(async (req,res) => {
 
 const updateTweet = asyncHandler(async (req,res) => {
      const { content } = req.body;
-     const tweetId = req.params;
+     const { tweetId } = req.params;
 
      if (!content) {
           throw new ApiError(400,"Please Content is required for update it")
@@ -94,8 +94,22 @@ const deleteTweet = asyncHandler(async (req,res) => {
      return res.status(200).json({message:"Tweet was deleted successfully"})
 })
 
+const getUserTweets = asyncHandler(async (req, res) => {
+    const { userId } = req.params;
+    if (!isValidObjectId(userId)) {
+        throw new ApiError(400, "Invalid user id");
+    }
+
+    const tweets = await Tweet.find({ owner: userId }).sort({ createdAt: -1 });
+
+    return res.status(200).json(
+        new ApiResponse(200, tweets, "Tweets fetched successfully")
+    );
+});
+
 export {
      createTweet,
      updateTweet,
-     deleteTweet
+     deleteTweet,
+     getUserTweets
 }

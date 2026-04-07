@@ -15,10 +15,10 @@ connectDB()
           throw error;
      })
      
-     app.listen(process.env.PORT || 8000,() => {
+     const server = app.listen(process.env.PORT || 8000,() => {
           console.log("Server is runing on port no : ", process.env.PORT);
-          
      })
+     server.setTimeout(600000); // 10 minutes for slow video uploads
 })
 .catch((err) => {
      console.log("MongoDB connect failed : ",err);

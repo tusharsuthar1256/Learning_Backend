@@ -64,20 +64,21 @@ const registerUser = asyncHandler(async (req, res) => {
     coverImageLocalPath = req.files.coverImage[0].path;
   }
 
-  if (!avatarLocalPath) {
-    throw new ApiError(400, "Avatar file is required");
+  let avatar = null;
+  if (avatarLocalPath) {
+    avatar = await uploadOnCloudinary(avatarLocalPath);
   }
 
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
-  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
-
-  if (!avatar) {
-    throw new ApiError(400, "Avatar file is required");
+  let coverImage = null;
+  if(coverImageLocalPath) {
+    coverImage = await uploadOnCloudinary(coverImageLocalPath);
   }
+
+  const defaultAvatar = `https://ui-avatars.com/api/?name=${username}&background=random&color=fff`;
 
   const user = await User.create({
     fullName,
-    avatar: avatar.url,
+    avatar: avatar?.url || defaultAvatar,
     coverImage: coverImage?.url || "",
     email,
     password,
@@ -267,8 +268,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findByIdAndUpdate(
-    req,
-    user?._id,
+    req.user?._id,
     {
       $set: {
         fullName,
@@ -292,6 +292,10 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
   const avatar = await uploadOnCloudinary(avatarLocalPath);
 
+  if (!avatar) {
+    throw new ApiError(400, "Error while uploading updated avatar to Cloudinary");
+  }
+
   if (!avatar.url) {
     throw new ApiError(400, "Error while uploading updated avatar");
   }
@@ -306,7 +310,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     { new: true }
   ).select("-password");
 
-  return res.status(200).json(200, user, "Avatar is updated Successfully");
+  return res.status(200).json(new ApiResponse(200, user, "Avatar is updated Successfully"));
 });
 
 const updateUserCoverImage = asyncHandler(async (req, res) => {
@@ -317,6 +321,10 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
   }
 
   const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+  if (!coverImage) {
+    throw new ApiError(400, "Error while uploading updated cover image to Cloudinary");
+  }
 
   if (!coverImage.url) {
     throw new ApiError(400, "Error while uploading COverImage url");
@@ -352,7 +360,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     },
     {
       $lookup: {
-        from: "subscription",
+        from: "subscriptions",
         localField: "_id",
         foreignField: "channel",
         as: "subscribers",
@@ -360,7 +368,7 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
     },
     {
       $lookup: {
-        from: "subscription",
+        from: "subscriptions",
         localField: "_id",
         foreignField: "subscriber",
         as: "subscribedTo",
@@ -417,7 +425,7 @@ const getWatchHistory = asyncHandler(async (req, res) => {
     },
     {
       $lookup: {
-        from: "Video",
+        from: "videos",
         localField: "watchHistory",
         foreignField: "_id",
         as: "watchHistory",
@@ -464,6 +472,26 @@ const getWatchHistory = asyncHandler(async (req, res) => {
 
 
 
+const searchUsers = asyncHandler(async (req, res) => {
+    const { query } = req.query;
+
+    if (!query) {
+        throw new ApiError(400, "Search query is required");
+    }
+
+    const users = await User.find({
+        $or: [
+            { username: { $regex: query, $options: "i" } },
+            { fullName: { $regex: query, $options: "i" } }
+        ]
+    }).select("username fullName avatar coverImage");
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, users, "Users fetched successfully"));
+});
+
+
 export {
   registerUser,
   loginUser,
@@ -476,5 +504,5 @@ export {
   updateUserCoverImage,
   getUserChannelProfile,
   getWatchHistory,
-
+  searchUsers
 };

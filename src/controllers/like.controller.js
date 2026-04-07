@@ -1,15 +1,16 @@
+import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/APiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { Video } from "../models/playlist.model.js";
-import { Playlist } from "../models/playlist.model.js";
+import { Video } from "../models/video.model.js";
+import { Playlist } from "../models//palylist.model.js";
 import { Like } from "../models/like.model.js";
 
 const toggleVideoLike = asyncHandler(async (req, res) => {
   const { videoId } = req.params;
 
   if (!videoId) {
-    throw new ApiError("Please provide a valid video id");
+    throw new ApiError(400, "Please provide a valid video id");
   }
 
   const likeAlready = await Like.findOne({
@@ -51,16 +52,16 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
   const { tweetId } = req.params;
 
   if (!tweetId) {
-    throw new ApiError("Please provide a valid tweet id");
+    throw new ApiError(400, "Please provide a valid tweet id");
   }
 
   const likedAlready = await Like.findOne({
     tweet: tweetId,
-    likeBy: req.user?._id,
+    likedBy: req.user?._id,
   });
 
   if (likedAlready) {
-    await Like.findByIdAndUpdate(likedAlready?._id);
+    await Like.findByIdAndDelete(likedAlready._id);
 
     return res
       .status(200)
@@ -75,7 +76,7 @@ const toggleTweetLike = asyncHandler(async (req, res) => {
 
   await Like.create({
     tweet: tweetId,
-    likeBy: req.user?._id,
+    likedBy: req.user?._id,
   });
 
   return res
@@ -93,15 +94,15 @@ const toggleCommentLike = asyncHandler(async (req,res) => {
      const {commentId} = req.params;
 
      if (!commentId) {
-          throw new ApiError("Please provide a valid video id");
+          throw new ApiError(400, "Please provide a valid comment id");
      }
 
      const likedAlready = await Like.findOne({
           comment:commentId,
-          likeBy:req.user?._id,
+          likedBy:req.user?._id,
      })
      if (likedAlready) {
-          await Like.findByIdAndUpdate(likedAlready?._id);
+          await Like.findByIdAndDelete(likedAlready._id);
 
           return res
                .status(200)
@@ -109,14 +110,14 @@ const toggleCommentLike = asyncHandler(async (req,res) => {
                     new ApiResponse(
                          200,
                           { isLiked: false },
-                   "You have successfully unliked the video"
+                    "You have successfully unliked the video"
                     )
                )
      }
 
      await Like.create({
           comment:commentId,
-          likeBy:req.user?._id,
+          likedBy:req.user?._id,
      })
 
      return res
@@ -130,13 +131,56 @@ const toggleCommentLike = asyncHandler(async (req,res) => {
           )
 })
 
-const getLikedVideos = asyncHandler(async (req,res) => {
-  
+const getLikedVideos = asyncHandler(async (req, res) => {
+    const userId = req.user?._id;
 
-})
+    if (!userId) {
+        throw new ApiError(401, "User not authenticated");
+    }
 
-export{
-  toggleCommentLike,
-  toggleTweetLike,
-  toggleVideoLike
+    const likedVideos = await Like.aggregate([
+        {
+            $match: {
+                likedBy: new mongoose.Types.ObjectId(userId),
+                video: { $exists: true }
+            }
+        },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "video",
+                foreignField: "_id",
+                as: "video",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "owner",
+                            pipeline: [
+                                { $project: { username: 1, fullName: 1, avatar: 1 } }
+                            ]
+                        }
+                    },
+                    { $addFields: { owner: { $first: "$owner" } } }
+                ]
+            }
+        },
+        {
+            $unwind: "$video"
+        },
+        {
+            $replaceRoot: { newRoot: "$video" }
+        }
+    ]);
+
+    return res.status(200).json(new ApiResponse(200, likedVideos, "Liked videos fetched successfully"));
+});
+
+export {
+    toggleCommentLike,
+    toggleTweetLike,
+    toggleVideoLike,
+    getLikedVideos
 }
